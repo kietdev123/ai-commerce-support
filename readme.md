@@ -8,6 +8,8 @@ Rule/API/Search trước LLM để giảm chi phí, độ trễ và hallucinatio
 
 **Phase 1 — E-commerce Foundation: hoàn thành.**
 
+**Phase 2 — Local AI Foundation: hoàn thành.**
+
 Stack hiện tại chạy hoàn toàn bằng Docker:
 
 - MedusaJS v2.19 backend và Admin Dashboard.
@@ -15,21 +17,24 @@ Stack hiện tại chạy hoàn toàn bằng Docker:
 - PostgreSQL 16 lưu dữ liệu commerce.
 - Redis 7 sẵn sàng cho các module hạ tầng ở phase tiếp theo.
 - Migration, seed data, Admin user và publishable API key được khởi tạo tự động.
-- Health check cho toàn bộ service.
+- Ollama 0.33.2 với `qwen3:1.7b` và `llama3.2:1b` được tải tự động.
+- Open WebUI 0.11.1 làm giao diện chat local, mặc định dùng Qwen.
+- Persistent volume và health check cho toàn bộ service.
 
-## Kiến trúc Phase 1
+## Kiến trúc hiện tại
 
 ```text
 Browser
   ├── Storefront (Next.js) ─────────────── http://localhost:8000
-  └── Admin Dashboard (Medusa) ─────────── http://localhost:9000/app
-                    │
-                    ▼
-             Medusa Backend API
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
-     PostgreSQL             Redis
+  ├── Admin Dashboard (Medusa) ─────────── http://localhost:9000/app
+  └── Open WebUI ───────────────────────── http://localhost:3000
+          │                                      │
+          ▼                                      ▼
+   Medusa Backend API                   Ollama Local API
+          │                                      │
+    ┌─────┴─────┐                         ┌──────┴──────┐
+    ▼           ▼                         ▼             ▼
+PostgreSQL    Redis                  Qwen3 1.7B    Llama 3.2 1B
 ```
 
 ## Khởi chạy
@@ -37,7 +42,8 @@ Browser
 Yêu cầu duy nhất:
 
 - Docker Engine có Docker Compose v2.
-- Các port `5432`, `6379`, `5173`, `8000` và `9000` đang trống.
+- Các port `3000`, `5432`, `6379`, `5173`, `8000`, `9000` và `11434` đang
+  trống.
 
 Tại thư mục root của repository:
 
@@ -53,24 +59,32 @@ Lần chạy đầu sẽ tự động:
 4. Tạo Admin user.
 5. Tạo và truyền publishable API key cho storefront.
 6. Khởi động backend, Admin Dashboard và storefront.
+7. Khởi động Ollama, tải hai model vào persistent volume và xác minh checksum.
+8. Khởi động Open WebUI sau khi model initializer hoàn tất.
+
+Lần đầu cần tải khoảng 4 GB Docker image và 2,7 GB model. Các lần sau dùng lại
+volume nên nhanh hơn đáng kể.
 
 Kiểm tra trạng thái:
 
 ```bash
 docker compose ps
-docker compose logs -f medusa storefront
+docker compose logs -f medusa storefront ollama open-webui
 ```
 
-Khi bốn service đều ở trạng thái `healthy`, truy cập:
+Khi sáu service dài hạn đều ở trạng thái `healthy`, truy cập:
 
 | Thành phần | URL | Thông tin đăng nhập |
 | --- | --- | --- |
 | Storefront | <http://localhost:8000> | Không cần |
 | Medusa Admin | <http://localhost:9000/app> | `admin@aicommerce.local` / `supersecret` |
 | Backend health | <http://localhost:9000/health> | Không cần |
+| Open WebUI | <http://localhost:3000> | Không cần, local single-user |
+| Ollama API | <http://localhost:11434/api/version> | Không cần |
 
 Thông tin đăng nhập và secret trong `docker-compose.yml` chỉ dành cho local demo.
 Phải thay toàn bộ trước khi triển khai ra môi trường public.
+Ollama và Open WebUI chỉ bind vào `127.0.0.1`, không được expose ra LAN.
 
 ## Sample data
 
@@ -93,6 +107,43 @@ metadata có brand, tags, warranty; order metadata có mã tham chiếu `DH0001`
 
 Seed có completion marker nên việc restart container không tạo dữ liệu trùng.
 
+## Local AI
+
+Model được cấu hình trong [`.env.example`](.env.example):
+
+| Model | Vai trò | Kết quả benchmark trên máy hiện tại |
+| --- | --- | --- |
+| `qwen3:1.7b` | Mặc định; tiếng Việt và instruction-following tốt hơn | 18,95 tok/s; TTFT 305 ms |
+| `llama3.2:1b` | Model nhẹ để đối chiếu latency | 39,40 tok/s; TTFT 100 ms |
+
+Các kết quả trên được đo trong Docker Desktop trên Apple M4 Pro, chạy CPU-only.
+Xem điều kiện test, RAM và kết quả đầy đủ tại
+[`docs/phase-2-benchmark.md`](docs/phase-2-benchmark.md).
+
+Quản lý model:
+
+```bash
+docker compose exec ollama ollama list
+docker compose exec ollama ollama pull qwen3:1.7b
+docker compose run --rm ollama-model-init
+```
+
+Kiểm tra API/UI và chạy lại benchmark:
+
+```bash
+node tests/functional/ollama-smoke.mjs
+node ai-platform/ollama/benchmark.mjs
+```
+
+Trên Linux/WSL có NVIDIA Container Toolkit, bật GPU bằng override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+Docker Desktop trên macOS không hỗ trợ truyền GPU Metal cho Ollama container,
+vì vậy override GPU không áp dụng cho Mac.
+
 ## Các lệnh thường dùng
 
 ```bash
@@ -108,10 +159,13 @@ docker compose logs -f
 # Dừng service nhưng giữ database
 docker compose down
 
-# Reset toàn bộ database và seed lại từ đầu
+# Reset database, model và dữ liệu Open WebUI rồi seed/tải lại từ đầu
 docker compose down -v
 docker compose up --build -d
 ```
+
+`docker compose down -v` xóa cả database commerce, model đã tải và lịch sử chat
+Open WebUI. Chỉ dùng khi thực sự muốn reset toàn bộ local stack.
 
 Kiểm tra số lượng dữ liệu trực tiếp trong PostgreSQL:
 
@@ -131,7 +185,7 @@ ai-commerce-support/
 │   ├── scripts/                  # Docker startup scripts
 │   └── Dockerfile
 ├── ai-platform/
-│   ├── ollama/
+│   ├── ollama/                   # Model initializer + benchmark
 │   ├── open-webui/
 │   ├── rag/
 │   ├── agent/
@@ -149,13 +203,14 @@ ai-commerce-support/
 │   └── load/
 ├── docs/
 │   ├── plan.md
+│   ├── phase-2-benchmark.md
 │   └── user_flow.md
 ├── docker-compose.yml
+├── docker-compose.gpu.yml
 └── readme.md
 ```
 
-Các thư mục ngoài `web-ecom` hiện là skeleton cho Phase 2-9, chưa được đưa vào
-Docker Compose để giữ phạm vi Phase 1 rõ ràng.
+Các thư mục RAG, agent, n8n và observability vẫn là skeleton cho Phase 3-9.
 
 ## Kiểm tra đã thực hiện
 
@@ -166,13 +221,17 @@ Docker Compose để giữ phạm vi Phase 1 rõ ràng.
 - Backend health, Admin và storefront trả HTTP `200`.
 - Store API trả đúng 24 products.
 - Restart backend không seed trùng dữ liệu.
+- Ollama và Open WebUI đều vượt qua health check.
+- Model initializer tải đủ hai model và kết thúc với exit code `0`.
+- Functional smoke test gọi chat API thành công, nhận `OK` và xác minh WebUI.
+- Benchmark đo TTFT, generation speed, RAM và VRAM cho cả hai model.
 
 ## Roadmap
 
 | Phase | Nội dung | Trạng thái |
 | --- | --- | --- |
 | 1 | E-commerce Foundation | Hoàn thành |
-| 2 | Local AI Foundation | Chưa thực hiện |
+| 2 | Local AI Foundation | Hoàn thành |
 | 3 | RAG Chatbot | Chưa thực hiện |
 | 4 | AI Agent / Tools | Chưa thực hiện |
 | 5 | n8n Automation | Chưa thực hiện |
@@ -188,3 +247,6 @@ Chi tiết xem [`docs/plan.md`](docs/plan.md) và
 
 - [Medusa — Install with Docker](https://docs.medusajs.com/learn/installation/docker)
 - [Medusa — Next.js Starter Storefront](https://docs.medusajs.com/resources/nextjs-starter)
+- [Ollama — Docker](https://docs.ollama.com/docker)
+- [Ollama — FAQ](https://docs.ollama.com/faq)
+- [Open WebUI — Quick Start](https://docs.openwebui.com/getting-started/quick-start/)
