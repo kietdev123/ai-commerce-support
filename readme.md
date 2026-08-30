@@ -19,22 +19,24 @@ Stack hiện tại chạy hoàn toàn bằng Docker:
 - Migration, seed data, Admin user và publishable API key được khởi tạo tự động.
 - Ollama 0.33.2 với `qwen3:1.7b` và `llama3.2:1b` được tải tự động.
 - Open WebUI 0.11.1 làm giao diện chat local, mặc định dùng Qwen.
+- Storefront có khung chat responsive, stream câu trả lời qua Open WebUI.
+- Open WebUI API key được tạo tự động và chỉ lưu trong Docker volume phía server.
 - Persistent volume và health check cho toàn bộ service.
 
 ## Kiến trúc hiện tại
 
 ```text
 Browser
-  ├── Storefront (Next.js) ─────────────── http://localhost:8000
+  ├── Storefront + Chat Widget ─────────── http://localhost:8000
   ├── Admin Dashboard (Medusa) ─────────── http://localhost:9000/app
   └── Open WebUI ───────────────────────── http://localhost:3000
-          │                                      │
-          ▼                                      ▼
-   Medusa Backend API                   Ollama Local API
-          │                                      │
-    ┌─────┴─────┐                         ┌──────┴──────┐
-    ▼           ▼                         ▼             ▼
-PostgreSQL    Redis                  Qwen3 1.7B    Llama 3.2 1B
+          │                 │                    │
+          ▼                 ▼                    ▼
+   Medusa Backend    Next.js /api/chat     Open WebUI API
+          │                 │                    │
+    ┌─────┴─────┐           └────────────────────┤
+    ▼           ▼                                ▼
+PostgreSQL    Redis                         Ollama Models
 ```
 
 ## Khởi chạy
@@ -61,6 +63,7 @@ Lần chạy đầu sẽ tự động:
 6. Khởi động backend, Admin Dashboard và storefront.
 7. Khởi động Ollama, tải hai model vào persistent volume và xác minh checksum.
 8. Khởi động Open WebUI sau khi model initializer hoàn tất.
+9. Tạo restricted Open WebUI integration API key cho storefront.
 
 Lần đầu cần tải khoảng 4 GB Docker image và 2,7 GB model. Các lần sau dùng lại
 volume nên nhanh hơn đáng kể.
@@ -85,6 +88,31 @@ Khi sáu service dài hạn đều ở trạng thái `healthy`, truy cập:
 Thông tin đăng nhập và secret trong `docker-compose.yml` chỉ dành cho local demo.
 Phải thay toàn bộ trước khi triển khai ra môi trường public.
 Ollama và Open WebUI chỉ bind vào `127.0.0.1`, không được expose ra LAN.
+
+## Storefront chatbot
+
+Nút chat nổi xuất hiện ở góc dưới bên phải của mọi trang storefront thuộc main
+layout. Giao diện hỗ trợ desktop/mobile, suggested questions, streaming, dừng
+câu trả lời và trạng thái kết nối.
+
+Luồng request:
+
+```text
+Chat widget
+  → POST /api/chat
+  → Next.js server đọc API key từ Docker volume
+  → Open WebUI /api/chat/completions
+  → Ollama
+```
+
+API key không dùng biến `NEXT_PUBLIC_*` và không được gửi xuống browser. Service
+`open-webui-integration-init` tạo hoặc đọc lại key hiện có, bật endpoint
+restriction và chỉ cho phép `/api/models` cùng `/api/chat/completions`.
+
+Chatbot hiện chỉ cung cấp tư vấn mua sắm chung. Knowledge base, citations,
+catalog search, tồn kho và đơn hàng chưa được kết nối; chúng thuộc Phase 3-4.
+System prompt hiện buộc model không khẳng định dữ liệu cửa hàng nếu không có
+context xác minh.
 
 ## Sample data
 
@@ -132,6 +160,7 @@ Kiểm tra API/UI và chạy lại benchmark:
 
 ```bash
 node tests/functional/ollama-smoke.mjs
+node tests/functional/storefront-chat-smoke.mjs
 node ai-platform/ollama/benchmark.mjs
 ```
 
@@ -164,8 +193,9 @@ docker compose down -v
 docker compose up --build -d
 ```
 
-`docker compose down -v` xóa cả database commerce, model đã tải và lịch sử chat
-Open WebUI. Chỉ dùng khi thực sự muốn reset toàn bộ local stack.
+`docker compose down -v` xóa cả database commerce, model đã tải, lịch sử Open
+WebUI và integration API key. Chỉ dùng khi thực sự muốn reset toàn bộ local
+stack.
 
 Kiểm tra số lượng dữ liệu trực tiếp trong PostgreSQL:
 
@@ -181,12 +211,12 @@ ai-commerce-support/
 ├── web-ecom/
 │   ├── apps/
 │   │   ├── backend/              # Medusa backend + Admin + seed
-│   │   └── storefront/           # Next.js storefront
+│   │   └── storefront/           # Next.js storefront + chat widget/BFF
 │   ├── scripts/                  # Docker startup scripts
 │   └── Dockerfile
 ├── ai-platform/
 │   ├── ollama/                   # Model initializer + benchmark
-│   ├── open-webui/
+│   ├── open-webui/               # Integration credential initializer
 │   ├── rag/
 │   ├── agent/
 │   └── model-router/
@@ -224,6 +254,9 @@ Các thư mục RAG, agent, n8n và observability vẫn là skeleton cho Phase 3
 - Ollama và Open WebUI đều vượt qua health check.
 - Model initializer tải đủ hai model và kết thúc với exit code `0`.
 - Functional smoke test gọi chat API thành công, nhận `OK` và xác minh WebUI.
+- Storefront chat smoke test đi qua Next.js → Open WebUI → Ollama thành công.
+- Chat widget đã được kiểm tra trực quan trên desktop và viewport mobile.
+- Open WebUI key chỉ được phép gọi model/chat endpoints.
 - Benchmark đo TTFT, generation speed, RAM và VRAM cho cả hai model.
 
 ## Roadmap
@@ -250,3 +283,5 @@ Chi tiết xem [`docs/plan.md`](docs/plan.md) và
 - [Ollama — Docker](https://docs.ollama.com/docker)
 - [Ollama — FAQ](https://docs.ollama.com/faq)
 - [Open WebUI — Quick Start](https://docs.openwebui.com/getting-started/quick-start/)
+- [Open WebUI — API endpoints](https://docs.openwebui.com/reference/api-endpoints/)
+- [Open WebUI — API keys](https://docs.openwebui.com/features/authentication-access/api-keys/)
