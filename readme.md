@@ -8,8 +8,8 @@ Rule/API/Search trước LLM để giảm chi phí, độ trễ và hallucinatio
 
 **Phase 1 — E-commerce Foundation: hoàn thành.**
 
-**Phase 2 — Local AI Foundation: source migration sang Dify đã hoàn thành và
-source stack đã chạy; one-time Studio setup vẫn cần thực hiện trước khi chat.**
+**Phase 2 — Local AI Foundation: hoàn thành.** Dify source stack, Ollama,
+Chatflow đã publish và storefront nhúng Dify Web App đều đã được cấu hình.
 
 Stack hiện tại chạy hoàn toàn bằng Docker:
 
@@ -78,7 +78,7 @@ Lần chạy đầu của commerce stack sẽ tự động:
 6. Khởi động backend, Admin Dashboard và storefront.
 7. Khởi động Ollama, tải hai model vào persistent volume và xác minh checksum.
 
-Lần đầu Dify cần thêm một bước cấu hình trong Studio:
+Khi cài project trên môi trường mới, cấu hình Dify trong Studio như sau:
 
 1. Mở <http://localhost:3000/install> và tạo owner account local.
 2. Vào **Settings → Model Providers**, cài Ollama plugin và thêm model
@@ -325,8 +325,8 @@ docker compose config --quiet
 pnpm --dir web-ecom --filter @dtc/storefront build
 ```
 
-Sau khi setup app trong Dify Studio, kiểm tra Ollama và mở storefront để kiểm
-tra iframe:
+Trên môi trường cài mới, sau khi setup app trong Dify Studio, kiểm tra Ollama và
+mở storefront để kiểm tra iframe:
 
 ```bash
 node tests/functional/ollama-smoke.mjs
@@ -340,7 +340,7 @@ thủ công tại storefront vì hội thoại chạy bên trong Dify Web App.
 | Phase | Nội dung | Trạng thái |
 | --- | --- | --- |
 | 1 | E-commerce Foundation | Hoàn thành |
-| 2 | Local AI Foundation | Source/stack sẵn sàng; cần setup Dify Studio |
+| 2 | Local AI Foundation | Hoàn thành |
 | 3 | RAG Chatbot | Chưa thực hiện |
 | 4 | AI Agent / Tools | Chưa thực hiện |
 | 5 | n8n Automation | Chưa thực hiện |

@@ -87,17 +87,17 @@ ai-commerce-support/
 
 ## Roadmap
 
-| Phase | Nội dung              | Kết quả                                      |
-| ----- | --------------------- | -------------------------------------------- |
-| **1** | E-commerce Foundation | MedusaJS + DB chạy hoàn chỉnh                |
-| **2** | Local AI Foundation   | Ollama + Dify + local model                   |
-| **3** | RAG Chatbot           | Chatbot trả lời FAQ/policy từ knowledge base |
-| **4** | AI Agent / Tools      | AI gọi Product/Inventory/Order API           |
-| **5** | n8n Automation        | CRM/Email/Ticket/Webhook workflows           |
-| **6** | AI Evaluation         | Dataset + benchmark model                    |
-| **7** | Observability         | Langfuse + Prometheus + Grafana              |
-| **8** | Load Test & Scaling   | k6 + tìm bottleneck + capacity planning      |
-| **9** | Cost Optimization     | Routing/cache/model optimization             |
+| Phase | Nội dung              | Kết quả                                      | Trạng thái     |
+| ----- | --------------------- | -------------------------------------------- | -------------- |
+| **1** | E-commerce Foundation | MedusaJS + DB chạy hoàn chỉnh                | Hoàn thành     |
+| **2** | Local AI Foundation   | Ollama + Dify + local model                  | Hoàn thành     |
+| **3** | RAG Chatbot           | Chatbot trả lời FAQ/policy từ knowledge base | Chưa thực hiện |
+| **4** | AI Agent / Tools      | AI gọi Product/Inventory/Order API           | Chưa thực hiện |
+| **5** | n8n Automation        | CRM/Email/Ticket/Webhook workflows           | Chưa thực hiện |
+| **6** | AI Evaluation         | Dataset + benchmark model                    | Chưa thực hiện |
+| **7** | Observability         | Langfuse + Prometheus + Grafana              | Chưa thực hiện |
+| **8** | Load Test & Scaling   | k6 + tìm bottleneck + capacity planning      | Chưa thực hiện |
+| **9** | Cost Optimization     | Routing/cache/model optimization             | Chưa thực hiện |
 
 ### Phase 1 — E-commerce
 
@@ -135,7 +135,9 @@ Phase 3-4; Ollama chỉ chịu trách nhiệm model runtime.
 
 **Done khi:** có thể chat ổn định với local model.
 
-#### Cập nhật migration Dify — 2026-08-30
+**Trạng thái:** Hoàn thành ngày 2026-09-07.
+
+#### Kết quả triển khai Dify
 
 - [x] Loại Open WebUI khỏi Compose, credential initializer, source và env.
 - [x] Vendor toàn bộ source Dify chính thức tại tag `1.16.1`; repository không
