@@ -79,20 +79,16 @@ services:
       NEXT_PUBLIC_DEFAULT_REGION: vn
       NEXT_PUBLIC_BASE_URL: http://localhost:8000
       STOREFRONT_API_KEY_FILE: /runtime/publishable-api-key
-      OPEN_WEBUI_URL: http://open-webui:8080
-      OPEN_WEBUI_API_KEY_FILE: /ai-runtime/open-webui-api-key
-      OPEN_WEBUI_MODEL: ${OLLAMA_DEFAULT_MODEL:-qwen3:1.7b}
+      DIFY_API_URL: http://dify/v1
+      DIFY_API_KEY: ${DIFY_API_KEY:-}
     command: ["./scripts/start-storefront.sh"]
     ports:
       - "8000:8000"
     volumes:
       - storefront_runtime:/runtime:ro
-      - ai_integration_runtime:/ai-runtime:ro
     depends_on:
       medusa:
         condition: service_healthy
-      open-webui-integration-init:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -138,61 +134,7 @@ services:
         condition: service_healthy
     restart: "no"
 
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:v0.11.1-slim
-    environment:
-      OLLAMA_BASE_URL: http://ollama:11434
-      WEBUI_AUTH: "False"
-      WEBUI_SECRET_KEY: local-open-webui-secret-change-before-production
-      WEBUI_NAME: AI Commerce Support
-      DEFAULT_MODELS: ${OLLAMA_DEFAULT_MODEL:-qwen3:1.7b}
-      ENABLE_SIGNUP: "False"
-      ENABLE_API_KEYS: "True"
-      ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS: "True"
-      API_KEYS_ALLOWED_ENDPOINTS: /api/models,/api/chat/completions
-      SCARF_NO_ANALYTICS: "true"
-      DO_NOT_TRACK: "true"
-      ANONYMIZED_TELEMETRY: "false"
-    ports:
-      - "127.0.0.1:${OPEN_WEBUI_PORT:-3000}:8080"
-    volumes:
-      - open_webui_data:/app/backend/data
-    depends_on:
-      ollama:
-        condition: service_healthy
-      ollama-model-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 60s
-    restart: unless-stopped
-
-  open-webui-integration-init:
-    image: ghcr.io/open-webui/open-webui:v0.11.1-slim
-    environment:
-      OPEN_WEBUI_URL: http://open-webui:8080
-      OPEN_WEBUI_API_KEY_FILE: /runtime/open-webui-api-key
-    volumes:
-      - ./ai-platform/open-webui/init-integration.py:/scripts/init-integration.py:ro
-      - ai_integration_runtime:/runtime
-    entrypoint: ["python", "/scripts/init-integration.py"]
-    depends_on:
-      open-webui:
-        condition: service_healthy
-    restart: "no"
-
 volumes:
   postgres_data:
   storefront_runtime:
   ollama_models:
-  open_webui_data:
-  ai_integration_runtime:

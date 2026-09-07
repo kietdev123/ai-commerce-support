@@ -1,5 +1,5 @@
 const ollamaUrl = process.env.OLLAMA_URL ?? "http://localhost:11434"
-const openWebUiUrl = process.env.OPEN_WEBUI_URL ?? "http://localhost:3000"
+const difyUrl = process.env.DIFY_URL ?? "http://localhost:3000"
 const model = process.env.OLLAMA_DEFAULT_MODEL ?? "qwen3:1.7b"
 
 async function fetchJson(url, options = {}, timeoutMs = 180_000) {
@@ -9,7 +9,9 @@ async function fetchJson(url, options = {}, timeoutMs = 180_000) {
   })
 
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}: ${await response.text()}`)
+    throw new Error(
+      `${response.status} ${response.statusText}: ${await response.text()}`,
+    )
   }
 
   return response.json()
@@ -21,7 +23,9 @@ const tags = await fetchJson(`${ollamaUrl}/api/tags`)
 const modelNames = tags.models.map((item) => item.name)
 
 if (!modelNames.includes(model)) {
-  throw new Error(`Expected ${model}; available models: ${modelNames.join(", ") || "none"}`)
+  throw new Error(
+    `Expected ${model}; available models: ${modelNames.join(", ") || "none"}`,
+  )
 }
 
 const generationStartedAt = performance.now()
@@ -46,26 +50,20 @@ if (!chat.message?.content?.trim()) {
   throw new Error("Ollama returned an empty chat response")
 }
 
-const webUiHealth = await fetch(`${openWebUiUrl}/health`, {
-  signal: AbortSignal.timeout(30_000),
-})
+const difyHealth = await fetchJson(`${difyUrl}/openapi/v1/_health`, {}, 30_000)
 
-if (!webUiHealth.ok) {
-  throw new Error(`Open WebUI health returned HTTP ${webUiHealth.status}`)
-}
-
-const webUiConfig = await fetchJson(`${openWebUiUrl}/api/config`, {}, 30_000)
-
-if (webUiConfig.features?.auth !== false) {
-  throw new Error("Open WebUI is not running in the expected local single-user mode")
-}
+if (difyHealth.ok !== true)
+  throw new Error("Dify health check did not return ok")
 
 console.log("Phase 2 smoke test passed")
 console.log(`Ollama version: ${version.version}`)
 console.log(`Available models: ${modelNames.join(", ")}`)
 console.log(`Default model: ${model}`)
-console.log(`Response: ${chat.message.content.trim().replaceAll(/\s+/g, " ").slice(0, 120)}`)
+console.log(
+  `Response: ${chat.message.content.trim().replaceAll(/\s+/g, " ").slice(0, 120)}`,
+)
 console.log(`Generation time: ${generationMs.toFixed(0)} ms`)
-console.log(`Total smoke-test time: ${(performance.now() - startedAt).toFixed(0)} ms`)
-console.log(`Open WebUI: ${openWebUiUrl}/health (${webUiHealth.status})`)
-console.log(`Open WebUI auth: ${webUiConfig.features.auth}`)
+console.log(
+  `Total smoke-test time: ${(performance.now() - startedAt).toFixed(0)} ms`,
+)
+console.log(`Dify: ${difyUrl}/openapi/v1/_health (${difyHealth.ok})`)

@@ -12,7 +12,7 @@ Phase 6.
 | Host | Apple M4 Pro, 24 GB unified memory, arm64 |
 | Runtime | Docker Desktop for Mac |
 | Ollama | 0.33.2 |
-| Open WebUI | 0.11.1 slim |
+| AI application layer | Open WebUI 0.11.1 slim (historical baseline) |
 | GPU trong container | Không; `size_vram = 0` |
 | Model mặc định | `qwen3:1.7b` |
 
@@ -39,8 +39,11 @@ Prompt:
 | `qwen3:1.7b` | 305 ms | 5,11 s | 91 tokens | 18,95 tok/s | 1,75 GB | 0,00 GB |
 | `llama3.2:1b` | 100 ms | 2,31 s | 87 tokens | 39,40 tok/s | 1,67 GB | 0,00 GB |
 
-Tại thời điểm đo, Open WebUI sử dụng khoảng 999 MiB RAM khi idle. Con số thực
-tế thay đổi theo Docker Desktop, context length và model đang được load.
+Tại thời điểm đo gốc, Open WebUI sử dụng khoảng 999 MiB RAM khi idle. Project đã
+thay Open WebUI bằng Dify 1.16.1 vào ngày 2026-08-30, nên số liệu này chỉ còn là
+baseline lịch sử và không đại diện cho Dify. Cần đo lại tổng RAM của Dify
+`api`/`worker`/`web`/plugin services sau khi hoàn tất one-time setup; không dùng
+con số cũ để capacity planning.
 
 ## Kết luận
 
@@ -67,4 +70,5 @@ node ai-platform/ollama/benchmark.mjs
 
 - [Ollama Docker](https://docs.ollama.com/docker)
 - [Ollama FAQ — Docker GPU trên macOS](https://docs.ollama.com/faq)
-- [Open WebUI Quick Start](https://docs.openwebui.com/getting-started/quick-start/)
+- [Dify Docker Compose deployment](https://docs.dify.ai/en/self-host/deploy/quick-start/docker-compose)
+- [Dify source 1.16.1](https://github.com/langgenius/dify/tree/1.16.1)

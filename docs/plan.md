@@ -18,9 +18,9 @@
                     └───────────┬───────────┘
                                 │
                     ┌───────────▼───────────┐
-                    │      AI Platform      │
+                    │     Dify Platform     │
                     │                       │
-                    │  RAG / Agent / Router │
+                    │ Chatflow/RAG/Agent    │
                     └──────┬────────┬───────┘
                            │        │
                   ┌────────▼──┐  ┌──▼─────────┐
@@ -53,7 +53,8 @@ ai-commerce-support/
 │
 ├── ai-platform/
 │   ├── ollama/               # Local LLM runtime
-│   ├── open-webui/           # AI UI / development
+│   ├── dify/                 # Full Dify source, vendored at tag 1.16.1
+│   ├── dify-app/             # Versioned Chatflow DSL
 │   ├── rag/                  # RAG pipeline
 │   ├── agent/                # Tool calling / agent
 │   └── model-router/         # Model / request routing
@@ -89,7 +90,7 @@ ai-commerce-support/
 | Phase | Nội dung              | Kết quả                                      |
 | ----- | --------------------- | -------------------------------------------- |
 | **1** | E-commerce Foundation | MedusaJS + DB chạy hoàn chỉnh                |
-| **2** | Local AI Foundation   | Ollama + Open WebUI + local model            |
+| **2** | Local AI Foundation   | Ollama + Dify + local model                   |
 | **3** | RAG Chatbot           | Chatbot trả lời FAQ/policy từ knowledge base |
 | **4** | AI Agent / Tools      | AI gọi Product/Inventory/Order API           |
 | **5** | n8n Automation        | CRM/Email/Ticket/Webhook workflows           |
@@ -119,16 +120,33 @@ Tạo sample ecommerce data đủ lớn để AI có dữ liệu thực tế đ�
 ### Phase 2 — Local AI
 
 ```text
-Open WebUI
-     ↓
-Ollama
-     ↓
-Qwen / Llama
+Dify Studio / Service API
+            ↓
+        Chatflow
+            ↓
+          Ollama
+            ↓
+      Qwen / Llama
 ```
 
-Thử nhiều local model và ghi nhận latency, RAM/VRAM, tốc độ generation.
+Thử nhiều local model và ghi nhận latency, RAM/VRAM, tốc độ generation. Dify
+quản lý prompt, conversation, Chatflow và là nền móng trực tiếp cho RAG/Agent ở
+Phase 3-4; Ollama chỉ chịu trách nhiệm model runtime.
 
 **Done khi:** có thể chat ổn định với local model.
+
+#### Cập nhật migration Dify — 2026-08-30
+
+- [x] Loại Open WebUI khỏi Compose, credential initializer, source và env.
+- [x] Vendor toàn bộ source Dify chính thức tại tag `1.16.1`; repository không
+  còn phụ thuộc Git submodule.
+- [x] Kết nối Dify source stack với Ollama qua Docker network nội bộ.
+- [x] Chuyển storefront BFF sang `/v1/chat-messages` và Dify SSE format.
+- [x] Quản lý `user`/`conversation_id` riêng cho từng phiên browser.
+- [x] Thêm Chatflow DSL có system prompt an toàn và `qwen3:1.7b`.
+- [x] Cập nhật smoke tests, runbook và benchmark note.
+- [ ] Thực hiện one-time setup local trong Dify Studio, publish app và điền
+  `DIFY_API_KEY` trước khi chạy functional smoke test end-to-end.
 
 ### Phase 3 — RAG
 

@@ -30,10 +30,12 @@ export default function ChatWidget({ customerName }: ChatWidgetProps) {
   const [input, setInput] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [statusText, setStatusText] = useState("Sẵn sàng hỗ trợ")
+  const [conversationId, setConversationId] = useState("")
   const [messages, setMessages] = useState<Message[]>([
     { id: "welcome", role: "assistant", content: welcomeMessage },
   ])
   const abortControllerRef = useRef<AbortController | null>(null)
+  const userRef = useRef("")
   const endOfMessagesRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -57,8 +59,8 @@ export default function ChatWidget({ customerName }: ChatWidgetProps) {
   const updateAssistantMessage = (id: string, content: string) => {
     setMessages((current) =>
       current.map((message) =>
-        message.id === id ? { ...message, content } : message
-      )
+        message.id === id ? { ...message, content } : message,
+      ),
     )
   }
 
@@ -91,12 +93,17 @@ export default function ChatWidget({ customerName }: ChatWidgetProps) {
 
     const abortController = new AbortController()
     abortControllerRef.current = abortController
+    userRef.current ||= createId()
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: conversation }),
+        body: JSON.stringify({
+          messages: conversation,
+          conversationId,
+          user: userRef.current,
+        }),
         signal: abortController.signal,
       })
 
@@ -109,6 +116,7 @@ export default function ChatWidget({ customerName }: ChatWidgetProps) {
       const decoder = new TextDecoder()
       let buffer = ""
       let fullResponse = ""
+      let streamError = ""
 
       const processLine = (line: string) => {
         const trimmedLine = line.trim()
@@ -119,16 +127,33 @@ export default function ChatWidget({ customerName }: ChatWidgetProps) {
 
         try {
           const event = JSON.parse(rawEvent)
-          const delta = event.choices?.[0]?.delta
+          if (typeof event.conversation_id === "string") {
+            setConversationId(event.conversation_id)
+          }
 
-          if (delta?.reasoning_content && !fullResponse) {
+          if (event.event === "workflow_started" && !fullResponse) {
             setStatusText("Đang suy nghĩ...")
           }
 
-          if (typeof delta?.content === "string" && delta.content) {
-            fullResponse += delta.content
+          if (event.event === "message" && typeof event.answer === "string") {
+            fullResponse += event.answer
             updateAssistantMessage(assistantMessage.id, fullResponse)
             setStatusText("Đang trả lời...")
+          }
+
+          if (
+            event.event === "message_replace" &&
+            typeof event.answer === "string"
+          ) {
+            fullResponse = event.answer
+            updateAssistantMessage(assistantMessage.id, fullResponse)
+          }
+
+          if (event.event === "error") {
+            streamError =
+              typeof event.message === "string"
+                ? event.message
+                : "Dify không thể xử lý yêu cầu."
           }
         } catch {
           // Ignore non-JSON keep-alive events from the upstream SSE stream.
@@ -148,6 +173,8 @@ export default function ChatWidget({ customerName }: ChatWidgetProps) {
       buffer += decoder.decode()
       if (buffer) processLine(buffer)
 
+      if (streamError) throw new Error(streamError)
+
       if (!fullResponse.trim()) {
         throw new Error("Model không tạo được câu trả lời.")
       }
@@ -162,7 +189,7 @@ export default function ChatWidget({ customerName }: ChatWidgetProps) {
           assistantMessage.id,
           error instanceof Error
             ? error.message
-            : "Có lỗi xảy ra. Vui lòng thử lại."
+            : "Có lỗi xảy ra. Vui lòng thử lại.",
         )
         setStatusText("Mất kết nối")
       }

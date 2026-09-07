@@ -1,9 +1,12 @@
 const storefrontUrl = process.env.STOREFRONT_URL ?? "http://localhost:8000"
+const user = `smoke-${Date.now()}`
 const startedAt = performance.now()
 const response = await fetch(`${storefrontUrl}/api/chat`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
+    user,
+    conversationId: "",
     messages: [
       {
         role: "user",
@@ -16,7 +19,7 @@ const response = await fetch(`${storefrontUrl}/api/chat`, {
 
 if (!response.ok || !response.body) {
   throw new Error(
-    `Storefront chat returned HTTP ${response.status}: ${await response.text()}`
+    `Storefront chat returned HTTP ${response.status}: ${await response.text()}`,
   )
 }
 
@@ -24,7 +27,7 @@ const decoder = new TextDecoder()
 let buffer = ""
 let answer = ""
 let firstContentAt
-let reasoningChunks = 0
+let conversationId = ""
 
 function processLine(line) {
   const trimmedLine = line.trim()
@@ -34,12 +37,21 @@ function processLine(line) {
   if (!rawEvent || rawEvent === "[DONE]") return
 
   const event = JSON.parse(rawEvent)
-  const delta = event.choices?.[0]?.delta
+  if (typeof event.conversation_id === "string") {
+    conversationId = event.conversation_id
+  }
 
-  if (delta?.reasoning_content) reasoningChunks += 1
-  if (delta?.content) {
+  if (event.event === "message" && typeof event.answer === "string") {
     firstContentAt ??= performance.now()
-    answer += delta.content
+    answer += event.answer
+  }
+
+  if (event.event === "message_replace" && typeof event.answer === "string") {
+    answer = event.answer
+  }
+
+  if (event.event === "error") {
+    throw new Error(`Dify stream failed: ${event.message ?? "unknown error"}`)
   }
 }
 
@@ -54,13 +66,19 @@ buffer += decoder.decode()
 if (buffer) processLine(buffer)
 
 if (answer.trim().length < 10) {
-  throw new Error(`Expected a useful answer; received: ${answer || "empty response"}`)
+  throw new Error(
+    `Expected a useful answer; received: ${answer || "empty response"}`,
+  )
+}
+
+if (!conversationId) {
+  throw new Error("Expected Dify to return a conversation_id")
 }
 
 console.log("Storefront chat smoke test passed")
 console.log(`Answer: ${answer.trim().replaceAll(/\s+/g, " ").slice(0, 160)}`)
 console.log(
-  `Time to visible content: ${firstContentAt ? (firstContentAt - startedAt).toFixed(0) : "n/a"} ms`
+  `Time to visible content: ${firstContentAt ? (firstContentAt - startedAt).toFixed(0) : "n/a"} ms`,
 )
-console.log(`Reasoning chunks hidden by widget: ${reasoningChunks}`)
+console.log(`Dify conversation: ${conversationId}`)
 console.log(`Total time: ${(performance.now() - startedAt).toFixed(0)} ms`)

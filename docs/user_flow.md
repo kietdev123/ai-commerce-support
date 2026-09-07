@@ -257,8 +257,8 @@ Ollama
 Cloud LLM
 → Complex reasoning / fallback
 
-Open WebUI
-→ Test LLM / RAG / internal AI UI
+Dify
+→ Chatflow / RAG / Agent / internal AI Studio / Service API
 
 n8n
 → Automation / Integration
