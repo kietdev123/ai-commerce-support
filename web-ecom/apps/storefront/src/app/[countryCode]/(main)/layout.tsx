@@ -40,7 +40,7 @@ export default async function PageLayout(props: { children: React.ReactNode }) {
         />
       )}
       {props.children}
-      <ChatWidget customerName={customer?.first_name} />
+      <ChatWidget />
       <Footer />
     </>
   )

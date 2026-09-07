@@ -79,8 +79,7 @@ services:
       NEXT_PUBLIC_DEFAULT_REGION: vn
       NEXT_PUBLIC_BASE_URL: http://localhost:8000
       STOREFRONT_API_KEY_FILE: /runtime/publishable-api-key
-      DIFY_API_URL: http://dify/v1
-      DIFY_API_KEY: ${DIFY_API_KEY:-}
+      NEXT_PUBLIC_DIFY_CHATBOT_URL: ${NEXT_PUBLIC_DIFY_CHATBOT_URL:-http://localhost:3000/chatbot/6oBfP4pTEJyQ3lJh}
     command: ["./scripts/start-storefront.sh"]
     ports:
       - "8000:8000"

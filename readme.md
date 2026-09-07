@@ -21,8 +21,8 @@ Stack hiện tại chạy hoàn toàn bằng Docker:
 - Ollama 0.33.2 với `qwen3:1.7b` và `llama3.2:1b` được tải tự động.
 - Toàn bộ source Dify 1.16.1 được vendored tại `ai-platform/dify` để phát triển
   Chatflow/RAG/Agent mà không phụ thuộc Git submodule.
-- Storefront có khung chat responsive, stream câu trả lời qua Dify Service API.
-- Dify app API key chỉ được truyền vào Next.js server, không gửi xuống browser.
+- Storefront nhúng trực tiếp Dify Web App trong khung chat responsive.
+- Storefront không giữ Dify Service API key và không có BFF `/api/chat`.
 - Persistent volume và health check cho toàn bộ service.
 
 ## Kiến trúc hiện tại
@@ -32,13 +32,13 @@ Browser
   ├── Storefront + Chat Widget ─────────── http://localhost:8000
   ├── Admin Dashboard (Medusa) ─────────── http://localhost:9000/app
   └── Dify Studio ──────────────────────── http://localhost:3000
-          │                 │                    │
-          ▼                 ▼                    ▼
-   Medusa Backend    Next.js /api/chat     Dify Service API
-          │                 │                    │
-    ┌─────┴─────┐           └────────────────────┤
-    ▼           ▼                                ▼
-PostgreSQL    Redis                         Ollama Models
+          │                                      │
+          ▼                                      ▼
+   Medusa Backend                    Embedded Dify Web App
+          │                                      │
+    ┌─────┴─────┐                                ▼
+    ▼           ▼                           Ollama Models
+PostgreSQL    Redis
 ```
 
 ## Khởi chạy
@@ -87,20 +87,20 @@ Lần đầu Dify cần thêm một bước cấu hình trong Studio:
 3. Trong Studio, import
    [`ai-platform/dify-app/ai-commerce-support.yml`](ai-platform/dify-app/ai-commerce-support.yml),
    kiểm tra model rồi **Publish** Chatflow.
-4. Mở **API Access**, tạo app API key và lưu vào `.env` ở root:
+4. Lấy URL iframe trong mục **Embed** của app đã publish và cấu hình URL public
+   cho storefront nếu code app thay đổi:
 
    ```dotenv
-   DIFY_API_KEY=app-xxxxxxxxxxxxxxxx
+   NEXT_PUBLIC_DIFY_CHATBOT_URL=http://localhost:3000/chatbot/{app-code}
    ```
 
-5. Nạp key mới vào storefront:
+5. Nạp URL mới vào storefront:
 
    ```bash
    docker compose up -d --force-recreate storefront
    ```
 
-Key là credential server-side; không đặt tên `NEXT_PUBLIC_*` và không commit
-file `.env`.
+URL iframe là thông tin public, không phải Service API key.
 
 Kiểm tra trạng thái:
 
@@ -129,24 +129,21 @@ database/Redis riêng từ Compose upstream; không dùng chung dữ liệu vớ
 ## Storefront chatbot
 
 Nút chat nổi xuất hiện ở góc dưới bên phải của mọi trang storefront thuộc main
-layout. Giao diện hỗ trợ desktop/mobile, suggested questions, streaming, dừng
-câu trả lời và trạng thái kết nối.
+layout. Nội dung chat, streaming, lịch sử hội thoại và các nút điều khiển do
+Dify Web App quản lý bên trong iframe.
 
 Luồng request:
 
 ```text
 Chat widget
-  → POST /api/chat
-  → Next.js server gắn Dify app API key
-  → Dify /v1/chat-messages
+  → iframe /chatbot/{app-code}
+  → Dify Web App
   → Chatflow AI Commerce Support
   → Ollama
 ```
 
-API key không dùng biến `NEXT_PUBLIC_*` và không được gửi xuống browser. Mỗi
-browser có một Dify `user` riêng; widget giữ `conversation_id` trả về từ stream
-để Dify quản lý memory giữa các lượt chat. BFF vẫn kiểm tra số lượng và độ dài
-message trước khi chuyển tiếp request.
+Storefront không gọi Dify Service API và không giữ API key. Dify Web App tự quản
+lý định danh browser, lịch sử hội thoại và streaming.
 
 Chatbot hiện chỉ cung cấp tư vấn mua sắm chung. Knowledge base, citations,
 catalog search, tồn kho và đơn hàng chưa được kết nối; chúng thuộc Phase 3-4.
@@ -227,7 +224,6 @@ Kiểm tra API/UI và chạy lại benchmark:
 
 ```bash
 node tests/functional/ollama-smoke.mjs
-node tests/functional/storefront-chat-smoke.mjs
 node ai-platform/ollama/benchmark.mjs
 ```
 
@@ -285,7 +281,7 @@ ai-commerce-support/
 ├── web-ecom/
 │   ├── apps/
 │   │   ├── backend/              # Medusa backend + Admin + seed
-│   │   └── storefront/           # Next.js storefront + chat widget/BFF
+│   │   └── storefront/           # Next.js storefront + embedded Dify widget
 │   ├── scripts/                  # Docker startup scripts
 │   └── Dockerfile
 ├── ai-platform/
@@ -329,16 +325,15 @@ docker compose config --quiet
 pnpm --dir web-ecom --filter @dtc/storefront build
 ```
 
-Sau khi setup app/API key trong Dify Studio, chạy functional smoke tests:
+Sau khi setup app trong Dify Studio, kiểm tra Ollama và mở storefront để kiểm
+tra iframe:
 
 ```bash
 node tests/functional/ollama-smoke.mjs
-node tests/functional/storefront-chat-smoke.mjs
 ```
 
-Test đầu xác minh Ollama cùng endpoint health của Dify. Test thứ hai đi qua
-Next.js → Dify Chatflow → Ollama, kiểm tra nội dung stream và
-`conversation_id`.
+Script xác minh Ollama cùng endpoint health của Dify. Việc chat được kiểm tra
+thủ công tại storefront vì hội thoại chạy bên trong Dify Web App.
 
 ## Roadmap
 
@@ -365,5 +360,4 @@ Chi tiết xem [`docs/plan.md`](docs/plan.md) và
 - [Ollama — FAQ](https://docs.ollama.com/faq)
 - [Dify — Docker Compose deployment](https://docs.dify.ai/en/self-host/deploy/quick-start/docker-compose)
 - [Dify — Ollama provider plugin](https://github.com/langgenius/dify-official-plugins/tree/main/models/ollama)
-- [Dify — Application Service API](https://docs.dify.ai/en/api-reference/guides/get-started)
 - [Dify — Source repository](https://github.com/langgenius/dify/tree/1.16.1)

@@ -120,7 +120,7 @@ Tạo sample ecommerce data đủ lớn để AI có dữ liệu thực tế đ�
 ### Phase 2 — Local AI
 
 ```text
-Dify Studio / Service API
+Dify Studio / Embedded Web App
             ↓
         Chatflow
             ↓
@@ -141,12 +141,11 @@ Phase 3-4; Ollama chỉ chịu trách nhiệm model runtime.
 - [x] Vendor toàn bộ source Dify chính thức tại tag `1.16.1`; repository không
   còn phụ thuộc Git submodule.
 - [x] Kết nối Dify source stack với Ollama qua Docker network nội bộ.
-- [x] Chuyển storefront BFF sang `/v1/chat-messages` và Dify SSE format.
-- [x] Quản lý `user`/`conversation_id` riêng cho từng phiên browser.
+- [x] Nhúng Dify Web App vào storefront bằng iframe; không duy trì BFF/API key.
+- [x] Để Dify Web App quản lý giao diện, streaming và lịch sử hội thoại.
 - [x] Thêm Chatflow DSL có system prompt an toàn và `qwen3:1.7b`.
-- [x] Cập nhật smoke tests, runbook và benchmark note.
-- [ ] Thực hiện one-time setup local trong Dify Studio, publish app và điền
-  `DIFY_API_KEY` trước khi chạy functional smoke test end-to-end.
+- [x] Cập nhật runbook và benchmark note.
+- [x] Publish app Dify và cấu hình URL `/chatbot/{code}` cho storefront.
 
 ### Phase 3 — RAG
 
