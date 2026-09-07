@@ -1,0 +1,16 @@
+services:
+  plugin_daemon:
+    networks:
+      - ai-commerce-shared
+
+  nginx:
+    networks:
+      default: {}
+      ai-commerce-shared:
+        aliases:
+          - dify
+
+networks:
+  ai-commerce-shared:
+    external: true
+    name: ai-commerce-support_default
