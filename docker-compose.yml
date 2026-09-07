@@ -125,6 +125,7 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODELS: ${OLLAMA_MODELS:-qwen3:1.7b,llama3.2:1b}
+      OLLAMA_EMBEDDING_MODELS: ${OLLAMA_EMBEDDING_MODELS:-bge-m3:latest}
     volumes:
       - ./ai-platform/ollama/init-models.sh:/scripts/init-models.sh:ro
     entrypoint: ["/bin/sh", "/scripts/init-models.sh"]

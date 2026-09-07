@@ -11,6 +11,10 @@ Rule/API/Search trước LLM để giảm chi phí, độ trễ và hallucinatio
 **Phase 2 — Local AI Foundation: hoàn thành.** Dify source stack, Ollama,
 Chatflow đã publish và storefront nhúng Dify Web App đều đã được cấu hình.
 
+**Phase 3 — RAG Chatbot: hoàn thành.** Knowledge base gồm FAQ, giao hàng,
+thanh toán, chính sách đổi trả demo và hướng dẫn sản phẩm đã được index bằng
+`bge-m3:latest`; Chatflow dùng retrieval trước khi gọi Qwen và hiển thị nguồn.
+
 Stack hiện tại chạy hoàn toàn bằng Docker:
 
 - MedusaJS v2.19 backend và Admin Dashboard.
@@ -18,7 +22,8 @@ Stack hiện tại chạy hoàn toàn bằng Docker:
 - PostgreSQL 16 lưu dữ liệu commerce.
 - Redis 7 sẵn sàng cho các module hạ tầng ở phase tiếp theo.
 - Migration, seed data, Admin user và publishable API key được khởi tạo tự động.
-- Ollama 0.33.2 với `qwen3:1.7b` và `llama3.2:1b` được tải tự động.
+- Ollama 0.33.2 với `qwen3:1.7b`, `llama3.2:1b` và embedding model
+  `bge-m3:latest` được tải tự động.
 - Toàn bộ source Dify 1.16.1 được vendored tại `ai-platform/dify` để phát triển
   Chatflow/RAG/Agent mà không phụ thuộc Git submodule.
 - Storefront nhúng trực tiếp Dify Web App trong khung chat responsive.
@@ -37,8 +42,9 @@ Browser
    Medusa Backend                    Embedded Dify Web App
           │                                      │
     ┌─────┴─────┐                                ▼
-    ▼           ▼                           Ollama Models
-PostgreSQL    Redis
+    ▼           ▼                    Dify Knowledge Retrieval
+PostgreSQL    Redis                         │            │
+                                        Weaviate    Ollama Models
 ```
 
 ## Khởi chạy
@@ -76,25 +82,32 @@ Lần chạy đầu của commerce stack sẽ tự động:
 4. Tạo Admin user.
 5. Tạo và truyền publishable API key cho storefront.
 6. Khởi động backend, Admin Dashboard và storefront.
-7. Khởi động Ollama, tải hai model vào persistent volume và xác minh checksum.
+7. Khởi động Ollama, tải hai chat model và `bge-m3:latest` vào persistent volume.
 
 Khi cài project trên môi trường mới, cấu hình Dify trong Studio như sau:
 
 1. Mở <http://localhost:3000/install> và tạo owner account local.
-2. Vào **Settings → Model Providers**, cài Ollama plugin và thêm model
-   `qwen3:1.7b` với Base URL `http://ollama:11434`, loại `Chat`, context/max
-   tokens `4096`.
-3. Trong Studio, import
+2. Vào **Settings → Model Providers**, cài Ollama plugin rồi thêm:
+   - `qwen3:1.7b`, loại `Chat`, Base URL `http://ollama:11434`, context/max
+     tokens `4096`.
+   - `bge-m3:latest`, loại `Text Embedding`, cùng Base URL, context `8192`.
+3. Vào **Knowledge**, tạo dataset `AI Commerce Support Knowledge`, chọn
+   **High Quality**, `bge-m3:latest`, Semantic Search, `Top K = 4`, score
+   threshold `0.25`, rồi upload toàn bộ file trong
+   [`ai-platform/rag/knowledge`](ai-platform/rag/knowledge).
+4. Trong Studio, import
    [`ai-platform/dify-app/ai-commerce-support.yml`](ai-platform/dify-app/ai-commerce-support.yml),
-   kiểm tra model rồi **Publish** Chatflow.
-4. Lấy URL iframe trong mục **Embed** của app đã publish và cấu hình URL public
+   mở node **AI Commerce Knowledge** và chọn lại dataset vừa tạo nếu Dify yêu
+   cầu ánh xạ knowledge của môi trường mới. Kiểm tra hai model rồi **Publish**
+   Chatflow.
+5. Lấy URL iframe trong mục **Embed** của app đã publish và cấu hình URL public
    cho storefront nếu code app thay đổi:
 
    ```dotenv
    NEXT_PUBLIC_DIFY_CHATBOT_URL=http://localhost:3000/chatbot/{app-code}
    ```
 
-5. Nạp URL mới vào storefront:
+6. Nạp URL mới vào storefront:
 
    ```bash
    docker compose up -d --force-recreate storefront
@@ -139,16 +152,58 @@ Chat widget
   → iframe /chatbot/{app-code}
   → Dify Web App
   → Chatflow AI Commerce Support
-  → Ollama
+  → Knowledge Retrieval (Weaviate + bge-m3)
+  → Qwen qua Ollama
 ```
 
 Storefront không gọi Dify Service API và không giữ API key. Dify Web App tự quản
 lý định danh browser, lịch sử hội thoại và streaming.
 
-Chatbot hiện chỉ cung cấp tư vấn mua sắm chung. Knowledge base, citations,
-catalog search, tồn kho và đơn hàng chưa được kết nối; chúng thuộc Phase 3-4.
-System prompt trong Chatflow DSL buộc model không khẳng định dữ liệu cửa hàng
-nếu không có context xác minh.
+Chatbot có thể giải đáp FAQ, giao hàng, thanh toán demo, đổi trả và tư vấn theo
+catalog tĩnh từ knowledge base. Dify Web App hiển thị nguồn retrieval; system
+prompt buộc model từ chối suy đoán khi context không đủ.
+
+Giá, tồn kho, trạng thái đơn, thanh toán thật và thao tác đổi trả/hoàn tiền là dữ
+liệu động chưa được kết nối. Các chức năng đó thuộc Phase 4 và phải đi qua
+Medusa API cùng business rule, không lấy từ RAG.
+
+## Sử dụng và cập nhật RAG
+
+Môi trường hiện tại đã có dataset `AI Commerce Support Knowledge` với 5 tài liệu
+và 34 chunks. Nguồn được version control tại:
+
+| Tài liệu | Nội dung |
+| --- | --- |
+| [`faq.md`](ai-platform/rag/knowledge/faq.md) | Câu hỏi thường gặp và giới hạn chatbot |
+| [`shipping.md`](ai-platform/rag/knowledge/shipping.md) | Vùng giao, phí và thời gian dự kiến |
+| [`payment.md`](ai-platform/rag/knowledge/payment.md) | Cấu hình thanh toán demo và quy tắc an toàn |
+| [`returns.md`](ai-platform/rag/knowledge/returns.md) | Chính sách đổi trả mẫu trong 7 ngày |
+| [`product-guide.md`](ai-platform/rag/knowledge/product-guide.md) | Tính năng và gợi ý cho 24 sản phẩm seed |
+
+Để sử dụng, mở <http://localhost:8000>, bấm nút chat ở góc dưới bên phải và gửi
+câu hỏi. Có thể dùng các câu như:
+
+```text
+Shop có những phương thức giao hàng nào?
+Tôi có thể đổi sản phẩm trong bao lâu?
+Laptop nào phù hợp để lập trình?
+Môi trường demo có hỗ trợ COD không?
+```
+
+Để cập nhật knowledge:
+
+1. Sửa file Markdown tương ứng trong `ai-platform/rag/knowledge/`.
+2. Mở **Dify Studio → Knowledge → AI Commerce Support Knowledge**.
+3. Thay thế tài liệu cũ hoặc upload bản mới, giữ cấu hình **High Quality** với
+   `bge-m3:latest`.
+4. Chờ trạng thái indexing của tài liệu là **Completed**. Nếu tạo dataset mới,
+   chọn lại dataset đó trong node **AI Commerce Knowledge**.
+5. Mở app **AI Commerce Support** và bấm **Publish** để đưa workflow mới vào
+   Dify Web App đang được storefront nhúng.
+
+Tài liệu `returns.md` và `payment.md` ghi rõ phạm vi demo. Trước production phải
+thay bằng chính sách đã được phê duyệt và triển khai các thao tác nhạy cảm thành
+business rule ở backend.
 
 ## Sample data
 
@@ -179,6 +234,7 @@ Model được cấu hình trong [`.env.example`](.env.example):
 | --- | --- | --- |
 | `qwen3:1.7b` | Mặc định; tiếng Việt và instruction-following tốt hơn | 18,95 tok/s; TTFT 305 ms |
 | `llama3.2:1b` | Model nhẹ để đối chiếu latency | 39,40 tok/s; TTFT 100 ms |
+| `bge-m3:latest` | Tạo embedding cho Dify Knowledge | Không áp dụng benchmark sinh văn bản |
 
 Các kết quả trên được đo trong Docker Desktop trên Apple M4 Pro, chạy CPU-only.
 Xem điều kiện test, RAM và kết quả đầy đủ tại
@@ -190,7 +246,7 @@ Quản lý và thử model trực tiếp trong container Ollama:
 # Tạo lại riêng Ollama nếu container chưa chạy
 docker compose up -d ollama
 
-# Tải/kiểm tra các model mặc định của project
+# Tải/kiểm tra chat model và embedding model mặc định của project
 docker compose run --rm ollama-model-init
 
 # Mở shell trong container
@@ -199,6 +255,7 @@ docker compose exec ollama /bin/sh
 # Các lệnh dưới đây chạy bên trong container
 ollama list
 ollama show qwen3:1.7b
+ollama show bge-m3:latest
 ollama ps
 ollama run qwen3:1.7b
 
@@ -290,6 +347,7 @@ ai-commerce-support/
 │   ├── dify-app/                 # Importable Chatflow DSL
 │   ├── dify-compose.sh           # Dify source-stack wrapper
 │   ├── rag/
+│   │   └── knowledge/             # 5 tài liệu nguồn của Phase 3
 │   ├── agent/
 │   └── model-router/
 ├── n8n/
@@ -313,7 +371,9 @@ ai-commerce-support/
 └── readme.md
 ```
 
-Các thư mục RAG, agent, n8n và observability vẫn là skeleton cho Phase 3-9.
+Các thư mục agent, n8n và observability vẫn là skeleton cho Phase 4-9. Source
+knowledge của Phase 3 nằm trong `ai-platform/rag/knowledge/`; vector index và
+metadata runtime được Dify lưu trong bind mounts của source stack.
 
 ## Kiểm tra
 
@@ -341,7 +401,7 @@ thủ công tại storefront vì hội thoại chạy bên trong Dify Web App.
 | --- | --- | --- |
 | 1 | E-commerce Foundation | Hoàn thành |
 | 2 | Local AI Foundation | Hoàn thành |
-| 3 | RAG Chatbot | Chưa thực hiện |
+| 3 | RAG Chatbot | Hoàn thành |
 | 4 | AI Agent / Tools | Chưa thực hiện |
 | 5 | n8n Automation | Chưa thực hiện |
 | 6 | AI Evaluation | Chưa thực hiện |

@@ -55,6 +55,27 @@ Human Support
 
 ### FAQ
 
+Luồng đang chạy ở Phase 3:
+
+```text
+Question
+ ↓
+Dify Knowledge Retrieval
+ ↓
+Semantic Search (bge-m3, Top K 4, threshold 0.25)
+ ↓
+Retrieved context + source
+ ↓
+Qwen 3 1.7B
+ ↓
+Answer + citation
+```
+
+Knowledge hiện gồm FAQ, shipping, payment demo, return policy demo và hướng dẫn
+24 sản phẩm. Nếu không có context đủ tin cậy, model phải từ chối suy đoán.
+
+Luồng routing/cache dưới đây là kiến trúc mục tiêu cho các phase tối ưu sau:
+
 ```text
 Question
  ↓
@@ -248,7 +269,7 @@ Node.js
 PostgreSQL
 → Product / Order / Conversation
 
-pgvector
+Weaviate (Dify source stack hiện tại)
 → Vector Search / RAG
 
 Ollama
@@ -259,6 +280,9 @@ Cloud LLM
 
 Dify
 → Chatflow / RAG / Agent / internal AI Studio / Service API
+
+bge-m3 qua Ollama
+→ Embedding tài liệu và truy vấn RAG
 
 n8n
 → Automation / Integration

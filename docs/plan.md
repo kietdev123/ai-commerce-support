@@ -91,7 +91,7 @@ ai-commerce-support/
 | ----- | --------------------- | -------------------------------------------- | -------------- |
 | **1** | E-commerce Foundation | MedusaJS + DB chạy hoàn chỉnh                | Hoàn thành     |
 | **2** | Local AI Foundation   | Ollama + Dify + local model                  | Hoàn thành     |
-| **3** | RAG Chatbot           | Chatbot trả lời FAQ/policy từ knowledge base | Chưa thực hiện |
+| **3** | RAG Chatbot           | Chatbot trả lời FAQ/policy từ knowledge base | Hoàn thành     |
 | **4** | AI Agent / Tools      | AI gọi Product/Inventory/Order API           | Chưa thực hiện |
 | **5** | n8n Automation        | CRM/Email/Ticket/Webhook workflows           | Chưa thực hiện |
 | **6** | AI Evaluation         | Dataset + benchmark model                    | Chưa thực hiện |
@@ -180,6 +180,25 @@ Answer + source
 ```
 
 **Done khi:** chatbot trả lời knowledge dựa trên tài liệu thay vì kiến thức model.
+
+**Trạng thái:** Hoàn thành ngày 2026-09-07.
+
+#### Kết quả triển khai RAG
+
+- [x] Tạo 5 tài liệu nguồn có version control cho FAQ, shipping, payment, return
+  policy và product knowledge.
+- [x] Thêm `bge-m3:latest` vào danh sách model Ollama được tải tự động.
+- [x] Cấu hình Ollama Text Embedding provider trong Dify qua Docker network nội
+  bộ.
+- [x] Tạo dataset `AI Commerce Support Knowledge` ở chế độ High Quality và index
+  34 chunks không lỗi.
+- [x] Cấu hình Semantic Search với `Top K = 4`, score threshold `0.25`, không
+  dùng reranker.
+- [x] Thêm Knowledge Retrieval vào trước LLM, truyền retrieval context cho Qwen
+  và bật source/citation trong Dify Web App.
+- [x] Publish workflow `Phase 3 RAG` và cập nhật DSL có thể import.
+- [x] Giữ giá, tồn kho, đơn hàng, thanh toán thật và transaction ngoài RAG để xử
+  lý bằng backend tools ở Phase 4.
 
 ### Phase 4 — AI Agent / Tool Calling
 

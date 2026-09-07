@@ -2,7 +2,7 @@
 
 set -eu
 
-models="${OLLAMA_MODELS:-qwen3:1.7b,llama3.2:1b}"
+models="${OLLAMA_MODELS:-qwen3:1.7b,llama3.2:1b},${OLLAMA_EMBEDDING_MODELS:-bge-m3:latest}"
 previous_ifs="$IFS"
 IFS=','
 
