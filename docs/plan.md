@@ -92,7 +92,7 @@ ai-commerce-support/
 | **1** | E-commerce Foundation | MedusaJS + DB chạy hoàn chỉnh                | Hoàn thành     |
 | **2** | Local AI Foundation   | Ollama + Dify + local model                  | Hoàn thành     |
 | **3** | RAG Chatbot           | Chatbot trả lời FAQ/policy từ knowledge base | Hoàn thành     |
-| **4** | AI Agent / Tools      | AI gọi Product/Inventory/Order API           | Chưa thực hiện |
+| **4** | AI Agent / Tools      | AI gọi Product/Inventory/Order API           | Hoàn thành     |
 | **5** | n8n Automation        | CRM/Email/Ticket/Webhook workflows           | Chưa thực hiện |
 | **6** | AI Evaluation         | Dataset + benchmark model                    | Chưa thực hiện |
 | **7** | Observability         | Langfuse + Prometheus + Grafana              | Chưa thực hiện |
@@ -214,13 +214,13 @@ get_order_status()
 Flow:
 
 ```text
-"Đơn DH001 của tôi đâu?"
+"Đơn DH0001 của tôi đâu? Email đặt hàng là customer01@example.com"
 
 LLM
  ↓
 detect order intent
  ↓
-get_order_status("DH001")
+get_order_status("DH0001", "customer01@example.com")
  ↓
 Medusa API
  ↓
@@ -230,6 +230,33 @@ Response
 ```
 
 Các transaction như cancel/refund phải qua backend rules + auth + confirmation.
+
+**Done khi:** Agent lấy được dữ liệu product/inventory/order từ backend tools;
+tool nhạy cảm không được mở nếu chưa có business rule, auth và confirmation.
+
+**Trạng thái:** Hoàn thành ngày 2026-09-08.
+
+#### Kết quả triển khai AI Agent / Tools
+
+- [x] Thêm namespace Medusa `/ai-tools` với 4 API chỉ-đọc:
+  `search_products`, `get_product`, `get_inventory`, `get_order_status`.
+- [x] Product search hỗ trợ từ khóa không dấu, category, brand, khoảng giá VND
+  và giới hạn tối đa 10 kết quả.
+- [x] Product detail và inventory đọc giá/tồn kho động từ Medusa thay vì RAG.
+- [x] Order status bắt buộc khớp cả `order_reference` và email đặt hàng, chỉ trả
+  trạng thái/tổng tiền/item tối thiểu; không trả PII địa chỉ hoặc thanh toán.
+- [x] Bảo vệ toàn bộ tool bằng shared secret `X-AI-Tool-Key` giữa Dify và Medusa.
+- [x] Version control OpenAPI tại `ai-platform/agent/medusa-tools.openapi.yml`.
+- [x] Chuyển Chatflow từ LLM node sang Commerce Agent dùng strategy ReAct,
+  Qwen qua Ollama, RAG context và đúng 4 Medusa tools.
+- [x] Ghim dependency chính chủ `langgenius/agent:0.0.47` trong Dify DSL.
+- [x] Không cấp tool hủy đơn, đổi đơn, refund, payment hoặc cập nhật inventory.
+- [x] Viết runbook cấu hình Dify và lệnh kiểm tra thủ công trong README.
+
+Theo yêu cầu triển khai, Phase 4 không chạy automated test, không gửi hội thoại
+và không gọi thử các endpoint. Runtime Dify được nạp theo runbook khi Docker
+daemon đang hoạt động; source, Compose, OpenAPI và DSL là cấu hình chuẩn được
+version control.
 
 **Nguyên tắc:**
 

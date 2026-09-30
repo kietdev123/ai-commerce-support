@@ -1,0 +1,366 @@
+openapi: 3.0.3
+info:
+  title: AI Commerce Medusa Read-only Tools
+  version: 1.0.0
+  description: >-
+    Các công cụ chỉ-đọc để Dify Agent lấy dữ liệu commerce động từ Medusa.
+    Không có thao tác tạo đơn, hủy đơn, đổi trả, hoàn tiền hay cập nhật tồn kho.
+servers:
+  - url: http://medusa:9000
+    description: Medusa trong Docker network ai-commerce-support_default
+security:
+  - AiToolKey: []
+paths:
+  /ai-tools/products/search:
+    get:
+      operationId: search_products
+      summary: Tìm sản phẩm
+      description: >-
+        Tìm catalog đang publish theo từ khóa và các bộ lọc tùy chọn. Dùng tool
+        này trước khi tư vấn hoặc khi chưa biết chính xác product handle/SKU.
+        Giá lọc dùng đơn vị VND. Không tự suy đoán giá hay tồn kho ngoài kết quả.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Từ khóa ngắn, ví dụ laptop, gaming, tai nghe, NovaTech.
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          description: Tên danh mục, ví dụ Laptops hoặc Accessories.
+          schema:
+            type: string
+        - name: brand
+          in: query
+          required: false
+          description: Tên thương hiệu.
+          schema:
+            type: string
+        - name: min_price
+          in: query
+          required: false
+          description: Giá tối thiểu bằng VND.
+          schema:
+            type: number
+            minimum: 0
+        - name: max_price
+          in: query
+          required: false
+          description: Giá tối đa bằng VND.
+          schema:
+            type: number
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: Số kết quả, mặc định 5 và tối đa 10.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 5
+      responses:
+        "200":
+          description: Danh sách sản phẩm phù hợp cùng giá và tồn kho hiện tại.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /ai-tools/products/{handle}:
+    get:
+      operationId: get_product
+      summary: Lấy chi tiết sản phẩm
+      description: >-
+        Lấy chi tiết một sản phẩm theo handle trả về từ search_products. Chỉ
+        gọi khi đã có handle chính xác; không dùng tên sản phẩm thay cho handle.
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          description: Product handle chính xác từ search_products.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chi tiết sản phẩm, biến thể, giá và tồn kho.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [product]
+                properties:
+                  product:
+                    $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /ai-tools/inventory/{sku}:
+    get:
+      operationId: get_inventory
+      summary: Kiểm tra tồn kho theo SKU
+      description: >-
+        Trả về tồn kho hiện tại của đúng một biến thể. Chỉ gọi với SKU chính
+        xác lấy từ search_products hoặc get_product.
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          description: SKU chính xác của biến thể.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tồn kho hiện tại của biến thể.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inventory]
+                properties:
+                  inventory:
+                    allOf:
+                      - $ref: "#/components/schemas/Variant"
+                      - type: object
+                        properties:
+                          product_title:
+                            type: string
+                          product_handle:
+                            type: string
+                          storefront_path:
+                            type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /ai-tools/orders/{order_reference}:
+    get:
+      operationId: get_order_status
+      summary: Tra cứu trạng thái đơn hàng
+      description: >-
+        Tra cứu chỉ-đọc và chỉ trả dữ liệu tối thiểu sau khi mã đơn và email
+        cùng khớp. Phải hỏi người dùng email đặt hàng nếu họ chưa cung cấp;
+        không được đoán email. Tool này không hủy đơn, đổi trả hay hoàn tiền.
+      parameters:
+        - name: order_reference
+          in: path
+          required: true
+          description: Mã đơn, ví dụ DH0001.
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]+$"
+        - name: email
+          in: query
+          required: true
+          description: Email người dùng đã dùng để đặt đơn; bắt buộc để xác minh.
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: Trạng thái đơn và danh sách sản phẩm tối thiểu.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderStatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  securitySchemes:
+    AiToolKey:
+      type: apiKey
+      in: header
+      name: X-AI-Tool-Key
+  responses:
+    BadRequest:
+      description: Tham số không hợp lệ hoặc thiếu thông tin xác minh.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Thiếu hoặc sai API key nội bộ.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Không tìm thấy dữ liệu khớp.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency_code, formatted]
+      properties:
+        amount:
+          type: number
+        currency_code:
+          type: string
+        formatted:
+          type: string
+    Variant:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+          nullable: true
+        sku:
+          type: string
+          nullable: true
+        price:
+          allOf:
+            - $ref: "#/components/schemas/Money"
+          nullable: true
+        inventory_quantity:
+          type: number
+          nullable: true
+        available:
+          type: boolean
+        allow_backorder:
+          type: boolean
+    Product:
+      type: object
+      required: [id, title, handle, storefront_path, variants]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        handle:
+          type: string
+        description:
+          type: string
+          nullable: true
+        storefront_path:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        warranty_months:
+          type: number
+          nullable: true
+        categories:
+          type: array
+          items:
+            type: string
+        minimum_price:
+          allOf:
+            - $ref: "#/components/schemas/Money"
+          nullable: true
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/Variant"
+    ProductSearchResponse:
+      type: object
+      required: [count, total_matches, products]
+      properties:
+        count:
+          type: integer
+        total_matches:
+          type: integer
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+    OrderItem:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+        product_handle:
+          type: string
+          nullable: true
+        variant_title:
+          type: string
+          nullable: true
+        sku:
+          type: string
+          nullable: true
+        quantity:
+          type: number
+          nullable: true
+        unit_price:
+          allOf:
+            - $ref: "#/components/schemas/Money"
+          nullable: true
+    OrderStatusResponse:
+      type: object
+      required: [order]
+      properties:
+        order:
+          type: object
+          required: [order_reference, verified_by, items]
+          properties:
+            order_reference:
+              type: string
+            display_id:
+              type: number
+              nullable: true
+            status:
+              type: string
+              nullable: true
+            status_label:
+              type: string
+              nullable: true
+            fulfillment_status:
+              type: string
+              nullable: true
+            fulfillment_status_label:
+              type: string
+              nullable: true
+            payment_status:
+              type: string
+              nullable: true
+            payment_status_label:
+              type: string
+              nullable: true
+            created_at:
+              type: string
+              nullable: true
+            updated_at:
+              type: string
+              nullable: true
+            total:
+              allOf:
+                - $ref: "#/components/schemas/Money"
+              nullable: true
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OrderItem"
+            verified_by:
+              type: string
+              enum: [order_reference_and_email]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string

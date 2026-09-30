@@ -44,6 +44,7 @@ services:
       MEDUSA_ADMIN_EMAIL: admin@aicommerce.local
       MEDUSA_ADMIN_PASSWORD: supersecret
       STOREFRONT_API_KEY_FILE: /runtime/publishable-api-key
+      AI_TOOL_API_KEY: ${AI_TOOL_API_KEY:-local-ai-tool-key-change-before-production}
     command: ["./scripts/start-backend.sh"]
     ports:
       - "9000:9000"

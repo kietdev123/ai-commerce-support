@@ -90,22 +90,33 @@ Kỹ thuật: Semantic Search, Embedding, Vector DB, RAG.
 
 ### Product Search
 
+Luồng đã triển khai ở Phase 4:
+
 ```text
 User Request
  ↓
-Extract filters
+Commerce Agent (ReAct + local Qwen)
  ↓
-Product DB / Search
+Extract q/category/brand/min_price/max_price
  ↓
-Ranking
+search_products (Medusa read-only API)
  ↓
-Results
+Validated catalog + price + inventory
+ ↓
+Agent explains results
 ```
 
-Nếu câu phức tạp:
+Agent chỉ dùng ngôn ngữ tự nhiên để hiểu yêu cầu và tạo tham số. Việc lọc giá,
+catalog publish và đọc tồn kho do backend thực hiện.
+
+Khi cần chi tiết hoặc tồn kho của một biến thể:
 
 ```text
-LLM → Structured JSON → Product Search
+search_products
+ ↓ exact handle / SKU
+get_product hoặc get_inventory
+ ↓
+Medusa response
 ```
 
 ### Order Tracking
@@ -113,16 +124,20 @@ LLM → Structured JSON → Product Search
 ```text
 User
  ↓
-Authentication
+Order reference + order email
  ↓
-Extract Order ID
+Commerce Agent checks both values exist
  ↓
-Order API
+get_order_status (X-AI-Tool-Key)
  ↓
-Response Template
+Medusa verifies reference + email
+ ↓
+Minimal order status response
 ```
 
-Không cần LLM nếu xác định được order.
+Agent phải hỏi email nếu người dùng mới cung cấp mã đơn. Backend không trả địa
+chỉ, điện thoại, email hoặc dữ liệu thanh toán. Việc không tìm thấy đơn dùng một
+thông báo chung để không tiết lộ mã đơn có tồn tại hay không.
 
 ### Cancel / Change Order
 
@@ -192,24 +207,30 @@ Human Support
 
 ### AI Agent
 
-Chỉ dùng cho yêu cầu nhiều bước.
+Phase 4 đã triển khai Agent cho RAG + các truy vấn commerce chỉ-đọc. Các tool CRM
+và Ticket vẫn thuộc Phase 5.
 
 ```text
 User Goal
  ↓
-Agent
- ├─ Product API
- ├─ Order API
- ├─ CRM
- ├─ RAG
- └─ Ticket API
+Knowledge Retrieval
  ↓
-Response
+Commerce Agent (ReAct)
+ ├─ Retrieved context (FAQ/policy)
+ ├─ search_products
+ ├─ get_product
+ ├─ get_inventory
+ └─ get_order_status
+ ↓
+Vietnamese response
 ```
 
 Ví dụ:
 
 > "Kiểm tra đơn gần nhất, nếu trễ hơn 3 ngày thì tạo ticket."
+
+Ví dụ trên vẫn chưa được phép thực thi trọn vẹn ở Phase 4: tra đơn yêu cầu mã
+đơn + email, còn tạo ticket thuộc Phase 5 và cần workflow/backend policy.
 
 ### Human Handoff
 

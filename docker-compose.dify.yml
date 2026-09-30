@@ -3,6 +3,16 @@ services:
     networks:
       - ai-commerce-shared
 
+  # Custom API tools are sent through Dify's SSRF proxy. Give only that proxy
+  # access to the commerce network and allow the exact internal Medusa host.
+  ssrf_proxy:
+    environment:
+      SSRF_PROXY_ALLOW_PRIVATE_DOMAINS: medusa
+    networks:
+      - default
+      - ssrf_proxy_network
+      - ai-commerce-shared
+
   nginx:
     networks:
       default: {}

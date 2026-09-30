@@ -15,6 +15,10 @@ Chatflow đã publish và storefront nhúng Dify Web App đều đã được c�
 thanh toán, chính sách đổi trả demo và hướng dẫn sản phẩm đã được index bằng
 `bge-m3:latest`; Chatflow dùng retrieval trước khi gọi Qwen và hiển thị nguồn.
 
+**Phase 4 — AI Agent / Tools: hoàn thành.** Dify Agent dùng RAG cho policy và
+4 Medusa tool chỉ-đọc cho product search, product detail, inventory và order
+status. Tra cứu đơn bắt buộc khớp cả mã đơn lẫn email; không có tool giao dịch.
+
 Stack hiện tại chạy hoàn toàn bằng Docker:
 
 - MedusaJS v2.19 backend và Admin Dashboard.
@@ -28,6 +32,9 @@ Stack hiện tại chạy hoàn toàn bằng Docker:
   Chatflow/RAG/Agent mà không phụ thuộc Git submodule.
 - Storefront nhúng trực tiếp Dify Web App trong khung chat responsive.
 - Storefront không giữ Dify Service API key và không có BFF `/api/chat`.
+- Dify Agent Strategies dùng ReAct với Qwen để chọn Medusa tool khi cần dữ liệu
+  commerce động.
+- Medusa cung cấp 4 endpoint AI chỉ-đọc, bảo vệ bằng `X-AI-Tool-Key`.
 - Persistent volume và health check cho toàn bộ service.
 
 ## Kiến trúc hiện tại
@@ -40,11 +47,14 @@ Browser
           │                                      │
           ▼                                      ▼
    Medusa Backend                    Embedded Dify Web App
-          │                                      │
-    ┌─────┴─────┐                                ▼
-    ▼           ▼                    Dify Knowledge Retrieval
-PostgreSQL    Redis                         │            │
-                                        Weaviate    Ollama Models
+          ▲                                      │
+          │                                ┌─────┴─────┐
+          │                                ▼           ▼
+          └──── Read-only tools ───── Dify Agent   Knowledge Retrieval
+                 Product/Stock/Order       │           │
+    ┌───────────┴───────────┐              ▼           ▼
+    ▼                       ▼          Ollama Qwen   Weaviate
+PostgreSQL                Redis
 ```
 
 ## Khởi chạy
@@ -98,16 +108,18 @@ Khi cài project trên môi trường mới, cấu hình Dify trong Studio như 
 4. Trong Studio, import
    [`ai-platform/dify-app/ai-commerce-support.yml`](ai-platform/dify-app/ai-commerce-support.yml),
    mở node **AI Commerce Knowledge** và chọn lại dataset vừa tạo nếu Dify yêu
-   cầu ánh xạ knowledge của môi trường mới. Kiểm tra hai model rồi **Publish**
-   Chatflow.
-5. Lấy URL iframe trong mục **Embed** của app đã publish và cấu hình URL public
+   cầu ánh xạ knowledge của môi trường mới. Kiểm tra hai model đã được map đúng.
+5. Cấu hình Agent tools theo mục [Thiết lập Phase 4](#thiết-lập-phase-4--ai-agent-tools),
+   sau đó kiểm tra node **Commerce Agent** đã nhận đúng model, knowledge và 4
+   tools rồi **Publish**.
+6. Lấy URL iframe trong mục **Embed** của app đã publish và cấu hình URL public
    cho storefront nếu code app thay đổi:
 
    ```dotenv
    NEXT_PUBLIC_DIFY_CHATBOT_URL=http://localhost:3000/chatbot/{app-code}
    ```
 
-6. Nạp URL mới vào storefront:
+7. Nạp URL mới vào storefront:
 
    ```bash
    docker compose up -d --force-recreate storefront
@@ -131,7 +143,7 @@ Khi các service đã sẵn sàng, truy cập:
 | Storefront | <http://localhost:8000> | Không cần |
 | Medusa Admin | <http://localhost:9000/app> | `admin@aicommerce.local` / `supersecret` |
 | Backend health | <http://localhost:9000/health> | Không cần |
-| Dify Studio | <http://localhost:3000> | Owner account tạo ở `/install` | `admin@aicommerce.local` / `supersecret1` |
+| Dify Studio | <http://localhost:3000> | Owner local: `admin@aicommerce.local` / `supersecret1` |
 | Ollama API | <http://localhost:11434/api/version> | Không cần |
 
 Thông tin đăng nhập và secret trong `docker-compose.yml` chỉ dành cho local demo.
@@ -151,21 +163,123 @@ Luồng request:
 Chat widget
   → iframe /chatbot/{app-code}
   → Dify Web App
-  → Chatflow AI Commerce Support
   → Knowledge Retrieval (Weaviate + bge-m3)
-  → Qwen qua Ollama
+  → Commerce Agent (ReAct + Qwen)
+      ├── FAQ/policy → retrieved context
+      └── dữ liệu động → Medusa read-only tools
 ```
 
 Storefront không gọi Dify Service API và không giữ API key. Dify Web App tự quản
 lý định danh browser, lịch sử hội thoại và streaming.
 
-Chatbot có thể giải đáp FAQ, giao hàng, thanh toán demo, đổi trả và tư vấn theo
-catalog tĩnh từ knowledge base. Dify Web App hiển thị nguồn retrieval; system
-prompt buộc model từ chối suy đoán khi context không đủ.
+Chatbot dùng knowledge base để giải đáp FAQ, giao hàng, thanh toán demo, đổi trả
+và bảo hành. Giá, danh mục, biến thể, tồn kho và trạng thái đơn được đọc trực
+tiếp từ Medusa khi Agent chọn tool phù hợp; model không được dùng RAG để suy
+đoán các giá trị động.
 
-Giá, tồn kho, trạng thái đơn, thanh toán thật và thao tác đổi trả/hoàn tiền là dữ
-liệu động chưa được kết nối. Các chức năng đó thuộc Phase 4 và phải đi qua
-Medusa API cùng business rule, không lấy từ RAG.
+Phase 4 không cấp quyền thanh toán, hủy/đổi đơn, hoàn tiền hoặc cập nhật tồn kho.
+Các thao tác đó vẫn phải được bổ sung thành backend business rule có xác thực,
+xác nhận và audit trước khi dùng trong production.
+
+## Thiết lập Phase 4 — AI Agent Tools
+
+### 1. Cấu hình khóa nội bộ và rebuild Medusa
+
+Copy `.env.example` thành `.env` nếu chưa có, sau đó thay khóa demo bằng chuỗi
+ngẫu nhiên riêng của môi trường:
+
+```dotenv
+AI_TOOL_API_KEY=replace-with-a-long-random-secret
+```
+
+Rebuild backend để nạp routes Phase 4, rồi khởi động Dify:
+
+```bash
+docker compose up --build -d medusa storefront ollama
+./ai-platform/dify-compose.sh up
+```
+
+`AI_TOOL_API_KEY` không được đặt trong storefront và không được dùng làm query
+parameter. Dify gửi khóa này qua header nội bộ `X-AI-Tool-Key`.
+
+### 2. Tạo Custom API Tool trong Dify
+
+1. Mở **Dify Studio → Integrations → Tools → Custom Tools**.
+2. Tạo provider với tên chính xác `ai_commerce_medusa` và import file
+   [`ai-platform/agent/medusa-tools.openapi.yml`](ai-platform/agent/medusa-tools.openapi.yml).
+3. Chọn authentication kiểu **API Key Header**:
+   - Header: `X-AI-Tool-Key`
+   - Prefix: `Custom`
+   - Value: đúng giá trị `AI_TOOL_API_KEY` đã cấu hình cho Medusa.
+4. Giữ server URL nội bộ là `http://medusa:9000`. Dify SSRF proxy đã được giới
+   hạn để chỉ cho phép hostname `medusa` trên Docker network
+   `ai-commerce-support_default`; không đổi thành `localhost:9000` vì
+   `localhost` bên trong container là chính container đó.
+5. Lưu provider. Dify phải hiển thị đủ 4 tool: `search_products`, `get_product`,
+   `get_inventory`, `get_order_status`.
+
+### 3. Cài Agent strategy và import Chatflow
+
+1. Mở **Integrations → Agent Strategies**, cài plugin chính chủ
+   **Dify Agent Strategies** (`langgenius/agent`). DSL đang ghim bản `0.0.47`.
+2. Import
+   [`ai-platform/dify-app/ai-commerce-support.yml`](ai-platform/dify-app/ai-commerce-support.yml).
+3. Trong node **AI Commerce Knowledge**, chọn dataset
+   `AI Commerce Support Knowledge` nếu Dify yêu cầu map lại ID.
+4. Trong node **Commerce Agent**, giữ strategy **ReAct**, model
+   `qwen3:1.7b`, maximum iterations `4`; xác nhận 4 tool đều trỏ tới provider
+   `ai_commerce_medusa` và đều được bật.
+5. Publish Chatflow và cập nhật `NEXT_PUBLIC_DIFY_CHATBOT_URL` nếu app code mới
+   khác app code cũ. Storefront tiếp tục dùng iframe, không gọi Dify Service API.
+
+ReAct được chọn vì hoạt động theo text với model Ollama hiện tại và không yêu
+cầu bật native function calling. Nếu đổi sang model có tool calling ổn định,
+có thể đổi strategy sang **FunctionCalling** trong Studio sau khi tự đánh giá.
+
+## Sử dụng Phase 4
+
+Mở <http://localhost:8000>, bấm nút chat và thử các dạng yêu cầu:
+
+```text
+Tìm laptop dưới 25 triệu.
+Cho tôi chi tiết Laptop Pro 14 và các phiên bản đang còn hàng.
+SKU LAP-PRO14-STD còn bao nhiêu sản phẩm?
+Kiểm tra đơn DH0001 với email customer01@example.com.
+```
+
+Với câu tra đơn chỉ có mã đơn, Agent phải hỏi thêm email đặt hàng trước khi gọi
+tool. Nếu người dùng yêu cầu hủy đơn hoặc hoàn tiền, Agent chỉ giải thích giới
+hạn và hướng dẫn liên hệ hỗ trợ; không có tool ghi để thực thi yêu cầu đó.
+
+Có thể tự kiểm tra trực tiếp từng Medusa endpoint từ terminal. Các lệnh dưới
+đây là hướng dẫn sử dụng, không được chạy tự động trong quá trình triển khai
+Phase 4 này:
+
+```bash
+export AI_COMMERCE_TOOL_KEY='replace-with-the-value-in-your-.env'
+
+curl -G 'http://localhost:9000/ai-tools/products/search' \
+  -H "X-AI-Tool-Key: ${AI_COMMERCE_TOOL_KEY}" \
+  --data-urlencode 'q=laptop' \
+  --data-urlencode 'max_price=25000000' \
+  --data-urlencode 'limit=5'
+
+curl 'http://localhost:9000/ai-tools/products/ai-commerce-laptop-pro-14' \
+  -H "X-AI-Tool-Key: ${AI_COMMERCE_TOOL_KEY}"
+
+curl 'http://localhost:9000/ai-tools/inventory/LAP-PRO14-STD' \
+  -H "X-AI-Tool-Key: ${AI_COMMERCE_TOOL_KEY}"
+
+curl -G 'http://localhost:9000/ai-tools/orders/DH0001' \
+  -H "X-AI-Tool-Key: ${AI_COMMERCE_TOOL_KEY}" \
+  --data-urlencode 'email=customer01@example.com'
+
+unset AI_COMMERCE_TOOL_KEY
+```
+
+Endpoint order chỉ trả mã/trạng thái/thời gian/tổng tiền/danh sách item; không
+trả địa chỉ, số điện thoại, email hay dữ liệu thanh toán. Khóa demo trong Compose
+chỉ dùng local và phải thay trước khi expose Medusa/Dify ra ngoài máy.
 
 ## Sử dụng và cập nhật RAG
 
@@ -222,7 +336,7 @@ tạo dữ liệu tiếng Việt và giá VND để dùng xuyên suốt các pha
 
 Catalog gồm laptop, điện thoại, tablet, audio, wearable và phụ kiện. Product
 metadata có brand, tags, warranty; order metadata có mã tham chiếu `DH0001` đến
-`DH0030`, phù hợp cho RAG, product search và order tool calling ở các phase sau.
+`DH0030`, được Phase 4 dùng cho product search và order tool calling.
 
 Seed có completion marker nên việc restart container không tạo dữ liệu trùng.
 
@@ -348,7 +462,7 @@ ai-commerce-support/
 │   ├── dify-compose.sh           # Dify source-stack wrapper
 │   ├── rag/
 │   │   └── knowledge/             # 5 tài liệu nguồn của Phase 3
-│   ├── agent/
+│   ├── agent/                    # OpenAPI của 4 Medusa read-only tools
 │   └── model-router/
 ├── n8n/
 │   └── workflows/
@@ -371,9 +485,10 @@ ai-commerce-support/
 └── readme.md
 ```
 
-Các thư mục agent, n8n và observability vẫn là skeleton cho Phase 4-9. Source
-knowledge của Phase 3 nằm trong `ai-platform/rag/knowledge/`; vector index và
-metadata runtime được Dify lưu trong bind mounts của source stack.
+Các thư mục n8n và observability vẫn là skeleton cho Phase 5-9. Source knowledge
+của Phase 3 nằm trong `ai-platform/rag/knowledge/`; hợp đồng tools Phase 4 nằm
+trong `ai-platform/agent/`. Vector index và metadata runtime được Dify lưu trong
+bind mounts của source stack.
 
 ## Kiểm tra
 
@@ -402,7 +517,7 @@ thủ công tại storefront vì hội thoại chạy bên trong Dify Web App.
 | 1 | E-commerce Foundation | Hoàn thành |
 | 2 | Local AI Foundation | Hoàn thành |
 | 3 | RAG Chatbot | Hoàn thành |
-| 4 | AI Agent / Tools | Chưa thực hiện |
+| 4 | AI Agent / Tools | Hoàn thành |
 | 5 | n8n Automation | Chưa thực hiện |
 | 6 | AI Evaluation | Chưa thực hiện |
 | 7 | Observability | Chưa thực hiện |
@@ -420,4 +535,5 @@ Chi tiết xem [`docs/plan.md`](docs/plan.md) và
 - [Ollama — FAQ](https://docs.ollama.com/faq)
 - [Dify — Docker Compose deployment](https://docs.dify.ai/en/self-host/deploy/quick-start/docker-compose)
 - [Dify — Ollama provider plugin](https://github.com/langgenius/dify-official-plugins/tree/main/models/ollama)
+- [Dify — Agent Strategies plugin](https://github.com/langgenius/dify-official-plugins/tree/main/agent-strategies/cot_agent)
 - [Dify — Source repository](https://github.com/langgenius/dify/tree/1.16.1)
